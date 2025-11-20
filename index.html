@@ -97,7 +97,7 @@
     const nudge = document.getElementById('nudge');
     const loadingOverlay = document.getElementById('loading');
 
-    // State gates
+    // State
     let sessionStarted = false;
     let hasFoundTarget = false;
 
@@ -120,6 +120,7 @@
     });
     const { renderer, scene, camera } = mindar;
     renderer.setClearColor(0x000000, 0);
+    renderer.autoClear = false; // we'll clear manually each frame
     scene.add(new THREE.AmbientLight(0xffffff, 1));
 
     // Main video plane (on the target)
@@ -130,14 +131,22 @@
     plane.scale.set(1.0/(16/9), 0.56/1.0, 1);
     plane.visible = false;
 
-    // HUD scene for "stick to screen" video when target lost
+    // HUD scene for "stick to screen" mode
     const hudScene = new THREE.Scene();
-    const hudCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
+    const hudCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+    hudCamera.position.z = 1;
+    hudCamera.lookAt(0, 0, 0);
+
     const hudPlane = new THREE.Mesh(
       new THREE.PlaneGeometry(1.5, 0.9),
-      new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent:false })
+      new THREE.MeshBasicMaterial({
+        side: THREE.DoubleSide,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false
+      })
     );
-    hudPlane.position.set(0, 0, -1);
+    hudPlane.position.set(0, 0, 0);
     hudPlane.visible = false;
     hudScene.add(hudPlane);
 
@@ -169,15 +178,13 @@
     };
 
     anchor.onTargetLost = () => {
-      hint.textContent = 'Lost target → HUD mode';
+      hint.textContent = 'Lost target → keeping video on screen';
 
-      // Hide marker plane and show HUD plane in front of camera
+      // Hide marker plane and show HUD plane
       plane.visible = false;
       hudPlane.visible = true;
 
-      // IMPORTANT: We do NOT pause here → video keeps playing
-      // Same VideoTexture is used on both plane and hudPlane,
-      // so as long as videoEl keeps playing, HUD will show it.
+      // IMPORTANT: we do NOT pause → video keeps playing
     };
 
     // ====== UI HELPERS ======
@@ -215,14 +222,14 @@
     });
 
     startBtn.addEventListener('click', async () => {
-      // Build a shared video texture for both AR plane & HUD plane
+      // Shared video texture for both AR plane & HUD plane
       const videoTex = new THREE.VideoTexture(videoEl);
       videoTex.encoding = THREE.sRGBEncoding;
       plane.material.map = videoTex;
       hudPlane.material.map = videoTex;
 
       videoEl.loop = true;
-      videoEl.pause();  // we only play when target is found
+      videoEl.pause();  // only play when target found
 
       startBtn.disabled = true;
       startBtn.textContent = 'Starting…';
@@ -233,16 +240,17 @@
         sessionStarted = true;
 
         renderer.setAnimationLoop(() => {
+          renderer.clear(); // clear color+depth
+
           if (videoEl.readyState >= videoEl.HAVE_CURRENT_DATA) {
             videoTex.needsUpdate = true;
           }
 
-          // Render AR scene first
+          // Render AR scene
           renderer.render(scene, camera);
 
-          // If HUD is visible (target lost), draw it on top
+          // Render HUD on top if visible
           if (hudPlane.visible) {
-            renderer.clearDepth();
             renderer.render(hudScene, hudCamera);
           }
         });
@@ -256,7 +264,7 @@
         hideLoading();
       }
 
-      // Edge case: if, for some reason, target was already registered
+      // Safety: if target was already found somehow
       if (hasFoundTarget && videoEl.paused) {
         try { await videoEl.play(); } catch {}
       }
