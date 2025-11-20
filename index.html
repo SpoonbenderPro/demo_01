@@ -25,7 +25,7 @@
     #hiddenVideo{display:none}
     #nudge{position:fixed;left:50%;transform:translateX(-50%);bottom:86px;z-index:5;color:#fff;background:#000a;padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);display:none}
 
-    /* NEW: Simple loading overlay */
+    /* loading overlay */
     #loading {
       position:fixed;
       inset:0;
@@ -63,7 +63,7 @@
   <div id="hint">Point your camera at the target image</div>
   <div id="container"></div>
 
-  <!-- NEW: loading overlay -->
+  <!-- loading overlay -->
   <div id="loading">
     <div class="spinner"></div>
     <div>Initializing camera…</div>
@@ -98,11 +98,8 @@
     const loadingOverlay = document.getElementById('loading');
 
     // Gates
-    let sessionStarted = false;     // already in your file previously
-    let hasFoundTarget = false;     // becomes true only after first scan
-
-    // NEW: HUD rotation state
-    let hudRotation = 0;
+    let sessionStarted = false;
+    let hasFoundTarget = false;
 
     // Ensure paused & muted initially
     videoEl.pause();
@@ -153,15 +150,12 @@
 
       if (!sessionStarted) return;
 
-      hasFoundTarget = true; // first successful detection
+      hasFoundTarget = true;
 
-      // Only start playback when the image has actually been found.
       if (videoEl.paused) {
         try {
           await videoEl.play();
         } catch (e) {
-          // If autoplay with sound is blocked (e.g., iOS), force muted play once,
-          // then user can tap Unmute to hear audio.
           videoEl.muted = true;
           setMuteUI();
           try { await videoEl.play(); } catch {}
@@ -174,24 +168,24 @@
       hint.textContent = 'Lost target → HUD mode';
       plane.visible = false;
       hudPlane.visible = true;
-      // We do NOT pause here so your "keep playing after trigger" flow remains.
+      // video keeps playing, just switches to HUD
     };
 
     // UI helpers
     const setMuteUI = () => { muteBtn.textContent = videoEl.muted ? 'Unmute' : 'Mute'; };
-    const showNudge = () => { nudge.style.display = 'block'; setTimeout(()=> nudge.style.display='none', 2000); };
+    const showNudge = () => {
+      nudge.style.display = 'block';
+      setTimeout(()=> nudge.style.display='none', 2000);
+    };
     setMuteUI();
 
     const showLoading = () => loadingOverlay.classList.add('visible');
     const hideLoading = () => loadingOverlay.classList.remove('visible');
 
     // Buttons
-    // Unmute now never starts playback by itself.
     muteBtn.addEventListener('click', () => {
-      // Just toggle mute state; do NOT call play().
       videoEl.muted = !videoEl.muted;
       setMuteUI();
-      // If user unmutes before any scan, there is still no audio because video hasn't started.
     });
 
     restartBtn.addEventListener('click', async () => {
@@ -207,15 +201,13 @@
     });
 
     startBtn.addEventListener('click', async () => {
-      // Build video textures on start (safe even if video is paused)
       const videoTex = new THREE.VideoTexture(videoEl);
       videoTex.encoding = THREE.sRGBEncoding;
       plane.material.map = videoTex;
       hudPlane.material.map = videoTex;
 
-      // DO NOT start playback here anymore.
       videoEl.loop = true;
-      videoEl.pause();  // be explicit
+      videoEl.pause();
 
       startBtn.disabled = true;
       startBtn.textContent = 'Starting…';
@@ -230,14 +222,11 @@
             videoTex.needsUpdate = true;
           }
 
-          // Main AR render
+          // main AR render
           renderer.render(scene, camera);
 
-          // HUD render when target is lost
+          // HUD render when target is lost (static, no rotation)
           if (hudPlane.visible) {
-            hudRotation += 0.01;           // NEW: gentle rotation
-            hudPlane.rotation.z = hudRotation;
-
             renderer.clearDepth();
             renderer.render(hudScene, hudCamera);
           }
@@ -252,7 +241,6 @@
         hideLoading();
       }
 
-      // Optional: if user had already scanned before clicking Start (rare), we respect it
       if (hasFoundTarget && videoEl.paused) {
         try { await videoEl.play(); } catch {}
       }
