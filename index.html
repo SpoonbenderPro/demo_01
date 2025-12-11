@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>WebAR — Stick-to-Camera + HUD</title>
+  <title>WebAR — Normal Video</title>
 
   <script type="importmap">
   {
@@ -16,46 +16,145 @@
   </script>
 
   <style>
-    html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:sans-serif}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#000;color:#fff;overflow:hidden;font-family:sans-serif}
+
     #container{position:fixed;inset:0}
-    #hint{position:fixed;left:0;right:0;top:10px;text-align:center;color:#fff;opacity:.9;z-index:3}
-    #ui{position:fixed;left:12px;right:12px;bottom:12px;z-index:4;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
-    button,a.button{padding:10px 14px;border:0;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;background:#4f46e5;color:#fff;text-decoration:none}
+
+    /* Hint text – black & bold so it pops on camera feed */
+    #hint{
+      position:fixed;
+      left:0;
+      right:0;
+      top:10px;
+      text-align:center;
+      color:#000;
+      font-weight:700;
+      opacity:.95;
+      z-index:3;
+      text-shadow:0 0 4px rgba(255,255,255,0.7);
+    }
+
+    #ui{
+      position:fixed;
+      left:12px;
+      right:12px;
+      bottom:12px;
+      z-index:4;
+      display:flex;
+      gap:8px;
+      justify-content:center;
+      flex-wrap:wrap;
+    }
+    button,a.button{
+      padding:10px 14px;
+      border:0;
+      border-radius:12px;
+      font-size:14px;
+      cursor:pointer;
+      background:#4f46e5;
+      color:#fff;
+      text-decoration:none;
+    }
     button.secondary{background:#374151}
     #hiddenVideo{display:none}
-    #nudge{position:fixed;left:50%;transform:translateX(-50%);bottom:86px;z-index:5;color:#fff;background:#000a;padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);display:none}
 
-    /* Loading overlay (for camera init / restart) */
-    #loading {
+    /* === SCAN OVERLAY (preview + custom scan animation) === */
+    #scanOverlay{
       position:fixed;
       inset:0;
-      display:flex;
+      display:none;              /* hidden before Start AR */
       align-items:center;
       justify-content:center;
-      background:rgba(0,0,0,0.85);
-      color:#fff;
-      font-size:18px;
-      z-index:10;
-      opacity:0;
+      z-index:5;
+      pointer-events:none;       /* camera taps still pass through */
+    }
+
+    #scanInner{
+      position:relative;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+    }
+
+    /* Taller & wider scan frame so it fully covers preview */
+    #scanFrame{
+      position:absolute;
+      top:-32px;
+      width:150%;
+      max-width:500px;
+      aspect-ratio:16 / 11;      /* tall frame */
       pointer-events:none;
-      transition:opacity 0.25s ease;
     }
-    #loading.visible {
-      opacity:1;
-      pointer-events:auto;
+
+    .scan-corner{
+      position:absolute;
+      width:18%;
+      height:35%;                /* corner height */
+      border:3px solid rgba(255,255,255,0.95);
     }
-    #loading .spinner {
-      border-radius:50%;
-      width:32px;
-      height:32px;
-      border:4px solid rgba(255,255,255,0.3);
-      border-top-color:#fff;
-      margin-right:10px;
-      animation:spin 0.8s linear infinite;
+    .scan-corner.tl{top:0;left:0;border-right:none;border-bottom:none;}
+    .scan-corner.tr{top:0;right:0;border-left:none;border-bottom:none;}
+    .scan-corner.bl{bottom:0;left:0;border-right:none;border-top:none;}
+    .scan-corner.br{bottom:0;right:0;border-left:none;border-top:none;}
+
+    /* Thick, bright scan line */
+    #scanLine{
+      position:absolute;
+      left:6%;
+      right:6%;
+      height:4px;
+      background:rgba(255,255,255,1);
+      animation:scanLine 1.4s ease-in-out infinite;
+      box-shadow:0 0 12px rgba(255,255,255,0.9);
+      border-radius:999px;
     }
-    @keyframes spin {
-      from { transform:rotate(0deg); }
-      to { transform:rotate(360deg); }
+
+    @keyframes scanLine{
+      0%   { top:10%; opacity:0.4; }
+      50%  { top:90%; opacity:1.0; }
+      100% { top:10%; opacity:0.4; }
+    }
+
+    /* Preview card */
+    #scanCard{
+      background:rgba(0,0,0,0.65);
+      border-radius:16px;
+      padding:12px 14px;
+      max-width:260px;
+      text-align:center;
+      border:1px solid rgba(255,255,255,0.15);
+      box-shadow:0 12px 30px rgba(0,0,0,0.6);
+    }
+    #scanPreviewWrapper{
+      border-radius:12px;
+      padding:6px;
+      margin-bottom:8px;
+      border:2px solid rgba(255,255,255,0.7);
+      animation:scanPulse 1.4s ease-in-out infinite;
+    }
+    #scanPreview{
+      display:block;
+      width:100%;
+      max-height:140px;
+      object-fit:contain;
+      opacity:0.75;
+      border-radius:8px;
+    }
+    #scanTextTitle{
+      font-size:14px;
+      font-weight:600;
+      margin-bottom:4px;
+    }
+    #scanTextBody{
+      font-size:12px;
+      opacity:0.85;
+    }
+    @keyframes scanPulse{
+      0%  { transform:scale(1);   opacity:0.9; }
+      50% { transform:scale(1.03);opacity:1.0; }
+      100%{ transform:scale(1);   opacity:0.9; }
     }
   </style>
 </head>
@@ -63,22 +162,39 @@
   <div id="hint">Point your camera at the target image</div>
   <div id="container"></div>
 
-  <!-- Loading UI -->
-  <div id="loading">
-    <div class="spinner"></div>
-    <div>Initializing camera…</div>
+  <!-- Scan guidance overlay with preview + custom scan frame -->
+  <div id="scanOverlay">
+    <div id="scanInner">
+      <div id="scanFrame">
+        <div class="scan-corner tl"></div>
+        <div class="scan-corner tr"></div>
+        <div class="scan-corner bl"></div>
+        <div class="scan-corner br"></div>
+        <div id="scanLine"></div>
+      </div>
+
+      <div id="scanCard">
+        <div id="scanPreviewWrapper">
+          <!-- Replace src with your actual marker preview image -->
+          <img id="scanPreview" src="./target-preview.png" alt="Scan this image">
+        </div>
+        <div id="scanTextTitle">Find this image</div>
+        <div id="scanTextBody">
+          Tap "Start AR", then point your camera at this picture.
+        </div>
+      </div>
+    </div>
   </div>
 
-  <video id="hiddenVideo" src="./promo.mp4" playsinline webkit-playsinline muted preload="none"></video>
+  <!-- Your NORMAL video (no chroma key) -->
+  <video id="hiddenVideo" src="./promo.mp4"
+         playsinline webkit-playsinline preload="auto"></video>
 
   <div id="ui">
     <button id="startBtn">Start AR</button>
-    <button id="muteBtn" class="secondary">Unmute</button>
     <button id="restartBtn" class="secondary">Restart</button>
     <a id="ctaBtn" class="button" href="#" target="_blank" rel="noopener">Visit Site</a>
   </div>
-
-  <div id="nudge">🔊 Tap “Unmute” to enable audio</div>
 
   <script type="module">
     import * as THREE from 'three';
@@ -87,190 +203,221 @@
     const CTA_URL = 'http://cgculture.in/';
     document.getElementById('ctaBtn').href = CTA_URL;
 
-    // DOM elements
-    const container = document.getElementById('container');
-    const startBtn = document.getElementById('startBtn');
-    const restartBtn = document.getElementById('restartBtn');
-    const muteBtn = document.getElementById('muteBtn');
-    const videoEl = document.getElementById('hiddenVideo');
-    const hint = document.getElementById('hint');
-    const nudge = document.getElementById('nudge');
-    const loadingOverlay = document.getElementById('loading');
+    const startBtn     = document.getElementById('startBtn');
+    const restartBtn   = document.getElementById('restartBtn');
+    const videoEl      = document.getElementById('hiddenVideo');
+    const hint         = document.getElementById('hint');
+    const container    = document.getElementById('container');
+    const scanOverlay  = document.getElementById('scanOverlay');
 
-    // State
-    let sessionStarted = false;
-    let hasFoundTarget = false;
+    let sessionStarted  = false;
+    let hasFoundTarget  = false;
+    let videoCompleted  = false;
+    let scanLocked      = false;
 
-    // Ensure paused & muted initially
+    // Initial video state
     videoEl.pause();
-    videoEl.muted = true;
+    videoEl.currentTime = 0;
+    videoEl.muted = false;
+    videoEl.loop = false;
 
-    // MindAR setup
+    // MindAR setup – no built-in UI, we use our own overlay
     const mindar = new MindARThree({
       container,
       imageTargetSrc: './targets.mind',
-      uiLoading: 'no',
-      uiScanning: 'no',
-      uiError: 'no',
-      warmupTolerance: 2,
+      maxTrack: 1,
+      warmupTolerance: 5,
       missTolerance: 8,
       filterMinCF: 0.0001,
       filterBeta: 0.01,
-      smoothFactor: 0.8
+      smoothFactor: 0.8,
+      uiLoading: 'no',
+      uiScanning: 'no',
+      uiError: 'no'
     });
+
     const { renderer, scene, camera } = mindar;
     renderer.setClearColor(0x000000, 0);
-    renderer.autoClear = false; // we'll clear manually each frame
     scene.add(new THREE.AmbientLight(0xffffff, 1));
 
-    // Main video plane (on the target)
+    // Shared video texture (no chroma)
+    const videoTexture = new THREE.VideoTexture(videoEl);
+    videoTexture.encoding = THREE.sRGBEncoding;
+
+    // ✅ Normal video material (no transparency / green screen removal)
+    const videoMaterial = new THREE.MeshBasicMaterial({
+      map: videoTexture,
+      side: THREE.DoubleSide
+    });
+
+    // Marker plane – 16:9 video mapped on top of target
     const plane = new THREE.Mesh(
       new THREE.PlaneGeometry(16/9, 1),
-      new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, toneMapped:false })
+      videoMaterial
     );
-    plane.scale.set(1.0/(16/9), 0.56/1.0, 1);
+    plane.scale.set(1.0 / (16/9), 0.56, 1);
     plane.visible = false;
+    scene.add(plane);
 
-    // HUD scene for "stick to screen" mode
-    const hudScene = new THREE.Scene();
-    const hudCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
-    hudCamera.position.z = 1;
-    hudCamera.lookAt(0, 0, 0);
+    // HUD plane (video in front of camera when target lost)
+    const hudScene  = new THREE.Scene();
+    const hudCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
 
     const hudPlane = new THREE.Mesh(
       new THREE.PlaneGeometry(1.5, 0.9),
-      new THREE.MeshBasicMaterial({
-        side: THREE.DoubleSide,
-        transparent: true,
-        depthTest: false,
-        depthWrite: false
-      })
+      videoMaterial
     );
-    hudPlane.position.set(0, 0, 0);
+    hudPlane.position.set(0, 0, -1);
     hudPlane.visible = false;
     hudScene.add(hudPlane);
 
     const anchor = mindar.addAnchor(0);
     anchor.group.add(plane);
 
-    // ====== ANCHOR EVENTS ======
+    // === ANCHOR EVENTS ===
     anchor.onTargetFound = async () => {
+      console.log('Target found');
       hint.textContent = 'Tracking ✓';
+
+      // Hide overlay once user successfully finds target
+      scanOverlay.style.display = 'none';
+      scanLocked = true;
+
+      if (!sessionStarted || videoCompleted) return;
+
       plane.visible = true;
-      hudPlane.visible = false;   // hide HUD, show AR plane
-
-      if (!sessionStarted) return;
-
+      hudPlane.visible = false;
       hasFoundTarget = true;
 
-      // Start / resume video when the image is actually found
       if (videoEl.paused) {
         try {
+          videoEl.muted = false;
           await videoEl.play();
-        } catch (e) {
-          // Autoplay with sound blocked → play muted & nudge user
-          videoEl.muted = true;
-          setMuteUI();
-          try { await videoEl.play(); } catch {}
-          showNudge();
+        } catch (err) {
+          console.warn('Play with sound failed, trying muted', err);
+          try {
+            videoEl.muted = true;
+            await videoEl.play();
+          } catch (err2) {
+            console.error('Video playback failed even muted', err2);
+          }
         }
       }
     };
 
     anchor.onTargetLost = () => {
-      hint.textContent = 'Lost target → keeping video on screen';
+      console.log('Target lost');
+      if (!sessionStarted || videoCompleted) return;
 
-      // Hide marker plane and show HUD plane
+      hint.textContent = 'Lost target → HUD mode';
       plane.visible = false;
       hudPlane.visible = true;
-
-      // IMPORTANT: we do NOT pause → video keeps playing
     };
 
-    // ====== UI HELPERS ======
-    const setMuteUI = () => {
-      muteBtn.textContent = videoEl.muted ? 'Unmute' : 'Mute';
-    };
-
-    const showNudge = () => {
-      nudge.style.display = 'block';
-      setTimeout(() => { nudge.style.display = 'none'; }, 2000);
-    };
-
-    const showLoading = () => loadingOverlay.classList.add('visible');
-    const hideLoading = () => loadingOverlay.classList.remove('visible');
-
-    setMuteUI();
-
-    // ====== BUTTON HANDLERS ======
-    muteBtn.addEventListener('click', () => {
-      // Only toggle mute, do NOT auto-play here
-      videoEl.muted = !videoEl.muted;
-      setMuteUI();
+    videoEl.addEventListener('ended', () => {
+      console.log('Video ended');
+      plane.visible = false;
+      hudPlane.visible = false;
+      videoCompleted = true;
+      hasFoundTarget = false;
+      hint.textContent = 'Experience finished — tap Restart to view again';
     });
 
-    restartBtn.addEventListener('click', async () => {
-      showLoading();
+    // === START AR SESSION ===
+    async function startARSession() {
+      console.log('startARSession()');
+
+      // Small muted pre-play to unlock audio
       try {
-        try { await mindar.stop(); } catch {}
-        await mindar.start();
+        videoEl.muted = true;
+        await videoEl.play();
+        await videoEl.pause();
+        videoEl.currentTime = 0;
+        videoEl.muted = false;
+        console.log('Muted pre-play OK, audio unlocked');
       } catch (e) {
-        console.error(e);
-      } finally {
-        hideLoading();
+        console.warn('Pre-play failed, audio may be restricted', e);
+        videoEl.pause();
+        videoEl.currentTime = 0;
+        videoEl.muted = false;
       }
-    });
-
-    startBtn.addEventListener('click', async () => {
-      // Shared video texture for both AR plane & HUD plane
-      const videoTex = new THREE.VideoTexture(videoEl);
-      videoTex.encoding = THREE.sRGBEncoding;
-      plane.material.map = videoTex;
-      hudPlane.material.map = videoTex;
-
-      videoEl.loop = true;
-      videoEl.pause();  // only play when target found
-
-      startBtn.disabled = true;
-      startBtn.textContent = 'Starting…';
-      showLoading();
 
       try {
         await mindar.start();
         sessionStarted = true;
+        videoCompleted = false;
+        hint.textContent = 'Point your camera at the target image';
+
+        // Show overlay only if we haven’t scanned yet
+        if (!scanLocked) {
+          scanOverlay.style.display = 'flex';
+        } else {
+          scanOverlay.style.display = 'none';
+        }
 
         renderer.setAnimationLoop(() => {
-          renderer.clear(); // clear color+depth
-
           if (videoEl.readyState >= videoEl.HAVE_CURRENT_DATA) {
-            videoTex.needsUpdate = true;
+            videoTexture.needsUpdate = true;
           }
-
-          // Render AR scene
           renderer.render(scene, camera);
 
-          // Render HUD on top if visible
           if (hudPlane.visible) {
+            renderer.clearDepth();
             renderer.render(hudScene, hudCamera);
           }
         });
 
         startBtn.textContent = 'Running…';
       } catch (e) {
-        console.error(e);
+        console.error('Failed to start MindAR', e);
         startBtn.disabled = false;
         startBtn.textContent = 'Start AR (Retry)';
-      } finally {
-        hideLoading();
+        hint.textContent = 'Failed to start AR. Tap "Start AR" to retry.';
       }
+    }
 
-      // Safety: if target was already found somehow
-      if (hasFoundTarget && videoEl.paused) {
-        try { await videoEl.play(); } catch {}
-      }
+    // Start button
+    startBtn.addEventListener('click', async () => {
+      console.log('Start AR clicked');
+
+      startBtn.disabled = true;
+      startBtn.textContent = 'Starting…';
+      hint.textContent = 'Starting AR, please wait…';
+
+      videoEl.pause();
+      videoEl.currentTime = 0;
+      videoEl.muted = false;
+      videoEl.loop = false;
+      videoCompleted = false;
+
+      await startARSession();
     });
 
-    // ====== RESIZE HANDLING ======
+    // Restart button
+    restartBtn.addEventListener('click', () => {
+      console.log('Restart clicked');
+
+      videoEl.pause();
+      videoEl.currentTime = 0;
+      videoEl.muted = false;
+      videoEl.loop = false;
+
+      videoCompleted = false;
+      hasFoundTarget = false;
+      scanLocked = false;
+
+      plane.visible = false;
+      hudPlane.visible = false;
+
+      if (sessionStarted) {
+        scanOverlay.style.display = 'flex';
+      }
+
+      hint.textContent = 'Point your camera at the target image';
+      console.log('Restart complete — scan target again to play from start');
+    });
+
+    // Resize handling
     const ro = new ResizeObserver(() => {
       renderer.setSize(container.clientWidth, container.clientHeight, false);
     });
